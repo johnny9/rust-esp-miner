@@ -2,8 +2,16 @@
 name = "esp-miner"
 version = "0.1.0"
 authors = ["johnny9 <985648+johnny9@users.noreply.github.com>"]
-edition = "2021"
+edition = "2018"
 resolver = "2"
+
+[patch.crates-io]
+smol = { git = "https://github.com/esp-rs-compat/smol" }
+polling = { git = "https://github.com/esp-rs-compat/polling" }
+socket2 = { git = "https://github.com/esp-rs-compat/socket2" }
+getrandom = { version = "0.2", git = "https://github.com/esp-rs-compat/getrandom.git" }
+#getrandom1 = { version = "0.1", git = "https://github.com/esp-rs-compat/getrandom.git", package = "getrandom", branch = "0.1" }
+embedded-io = { git = "https://github.com/ivmarkov/embedded-io" }
 
 [profile.release]
 opt-level = "s"
@@ -16,8 +24,22 @@ opt-level = "z"
 pio = ["esp-idf-sys/pio"]
 
 [dependencies]
-esp-idf-sys = { version = "0.32.1", features = ["binstart"] }
-
+anyhow = {version = "1", features = ["backtrace"]}
+log = "0.4"
+url = "2"
+esp-idf-sys = { version = "0.32", features = ["binstart"] }
+esp-idf-svc = "0.45"
+esp-idf-hal = "0.40"
+embedded-svc = "0.24"
+embedded-hal = "0.2"
+bitcoin = "0.27.1"
+roles_logic_sv2 = { git = "https://github.com/stratum-mining/stratum.git" }
+serde = { version = "1.0.89", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0.64", default-features = false, features = ["alloc"] }
+v1 = { git = "https://github.com/stratum-mining/stratum.git", package="sv1_api" }
+smol = "1.2"
+async-io = "=1.12"
 
 [build-dependencies]
-embuild = "0.31.1"
+embuild = { version = "0.31", features = ["elf"] }
+anyhow = "1"
