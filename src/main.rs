@@ -28,7 +28,6 @@ use embedded_svc::eth;
 use embedded_svc::httpd::{registry::*, *};
 use embedded_svc::io;
 use embedded_svc::ipv4;
-use embedded_svc::mqtt::client::{Client, Connection, MessageImpl, Publish, QoS};
 use embedded_svc::ping::Ping;
 use embedded_svc::sys_time::SystemTime;
 use embedded_svc::timer::TimerService;
@@ -39,7 +38,6 @@ use embedded_svc::wifi::*;
 use esp_idf_svc::eventloop::*;
 use esp_idf_svc::httpd as idf;
 use esp_idf_svc::httpd::ServerRegistry;
-use esp_idf_svc::mqtt::client::*;
 use esp_idf_svc::netif::*;
 use esp_idf_svc::nvs::*;
 use esp_idf_svc::ping;
@@ -115,10 +113,6 @@ fn main() -> Result<()> {
     info!("SNTP initialized");
 
     let (eventloop, _subscription) = test_eventloop()?;
-
-    let mqtt_client = test_mqtt_client()?;
-
-    let _timer = test_timer(eventloop, mqtt_client)?;
 
     block_on(main_async());
 
@@ -227,44 +221,6 @@ fn test_tcp_bind() -> Result<()> {
     Ok(())
 }
 
-fn test_timer(
-    eventloop: EspBackgroundEventLoop,
-    mut client: EspMqttClient<ConnState<MessageImpl, EspError>>,
-) -> Result<EspTimer> {
-    use embedded_svc::event_bus::Postbox;
-
-    info!("About to schedule a one-shot timer for after 2 seconds");
-    let once_timer = EspTimerService::new()?.timer(|| {
-        info!("One-shot timer triggered");
-    })?;
-
-    once_timer.after(Duration::from_secs(2))?;
-
-    thread::sleep(Duration::from_secs(3));
-
-    info!("About to schedule a periodic timer every five seconds");
-    let periodic_timer = EspTimerService::new()?.timer(move || {
-        info!("Tick from periodic timer");
-
-        let now = EspSystemTime {}.now();
-
-        eventloop.post(&EventLoopMessage::new(now), None).unwrap();
-
-        client
-            .publish(
-                "rust-esp32-std-demo",
-                QoS::AtMostOnce,
-                false,
-                format!("Now is {now:?}").as_bytes(),
-            )
-            .unwrap();
-    })?;
-
-    periodic_timer.every(Duration::from_secs(5))?;
-
-    Ok(periodic_timer)
-}
-
 #[derive(Copy, Clone, Debug)]
 struct EventLoopMessage(Duration);
 
@@ -310,57 +266,6 @@ fn test_eventloop() -> Result<(EspBackgroundEventLoop, EspBackgroundSubscription
     })?;
 
     Ok((eventloop, subscription))
-}
-
-fn test_mqtt_client() -> Result<EspMqttClient<ConnState<MessageImpl, EspError>>> {
-    info!("About to start MQTT client");
-
-    let conf = MqttClientConfiguration {
-        client_id: Some("rust-esp32-std-demo"),
-        crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
-
-        ..Default::default()
-    };
-
-    let (mut client, mut connection) =
-        EspMqttClient::new_with_conn("mqtts://broker.emqx.io:8883", &conf)?;
-
-    info!("MQTT client started");
-
-    // Need to immediately start pumping the connection for messages, or else subscribe() and publish() below will not work
-    // Note that when using the alternative constructor - `EspMqttClient::new` - you don't need to
-    // spawn a new thread, as the messages will be pumped with a backpressure into the callback you provide.
-    // Yet, you still need to efficiently process each message in the callback without blocking for too long.
-    //
-    // Note also that if you go to http://tools.emqx.io/ and then connect and send a message to topic
-    // "rust-esp32-std-demo", the client configured here should receive it.
-    thread::spawn(move || {
-        info!("MQTT Listening for messages");
-
-        while let Some(msg) = connection.next() {
-            match msg {
-                Err(e) => info!("MQTT Message ERROR: {}", e),
-                Ok(msg) => info!("MQTT Message: {:?}", msg),
-            }
-        }
-
-        info!("MQTT connection loop exit");
-    });
-
-    client.subscribe("rust-esp32-std-demo", QoS::AtMostOnce)?;
-
-    info!("Subscribed to all topics (rust-esp32-std-demo)");
-
-    client.publish(
-        "rust-esp32-std-demo",
-        QoS::AtMostOnce,
-        false,
-        "Hello from rust-esp32-std-demo!".as_bytes(),
-    )?;
-
-    info!("Published a hello message to topic \"rust-esp32-std-demo\"");
-
-    Ok(client)
 }
 
 #[cfg(feature = "experimental")]
