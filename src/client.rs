@@ -1,11 +1,13 @@
-use async_std::net::TcpStream;
+use async_io::Async;
+use std::net::TcpStream;
 use std::convert::TryInto;
 
 use bitcoin::util::uint::Uint256;
 
 use async_channel::{bounded, Receiver, Sender};
 
-use async_std::{io::BufReader, prelude::*, task};
+use futures_lite::{AsyncReadExt, AsyncWriteExt, StreamExt, io::BufReader};
+use async_io::spawn;
 use roles_logic_sv2::utils::Mutex;
 use std::{sync::Arc, time};
 
@@ -71,7 +73,9 @@ impl Client {
     ///    formatted as a `v1::client_to_server::Submit` and then serialized into a json message
     ///    that is sent to the Upstream via `sender_outgoing`.
     pub(crate) async fn connect(client_id: u32) {
-        let stream = std::sync::Arc::new(TcpStream::connect(ADDR).await.unwrap());
+        let std_stream = TcpStream::connect(ADDR)?;
+        let async_stream = Async::new(stream).unwrap();
+        let stream = Arc::new(async_stream);
         let (reader, writer) = (stream.clone(), stream);
 
         // `sender_incoming` listens on socket for incoming messages from the Upstream and sends
@@ -102,22 +106,24 @@ impl Client {
 
         // Reads messages sent by the Upstream from the socket to be passed to the
         // `receiver_incoming`
-        task::spawn(async move {
+        // Assuming reader is of type Async<TcpStream> from async-io
+        spawn(async move {
             let mut messages = BufReader::new(&*reader).lines();
             while let Some(message) = messages.next().await {
                 let message = message.unwrap();
                 sender_incoming.send(message).await.unwrap();
             }
-        });
+        }).detach();
 
         // Waits to receive a message from `sender_outgoing` and writes it to the socket for the
         // Upstream to receive
-        task::spawn(async move {
+        // Assuming writer is of type Async<TcpStream> from async-io
+        spawn(async move {
             loop {
                 let message: String = receiver_outgoing.recv().await.unwrap();
                 (&*writer).write_all(message.as_bytes()).await.unwrap();
             }
-        });
+        }).detach();
 
         // Clone the sender to the Upstream node to use it in another task below as
         // `sender_outgoing` is consumed by the initialization of `Client`
@@ -171,7 +177,7 @@ impl Client {
         // `mining.submit` message. This message is contructed as a `client_to_server::Submit` and
         // then serialized into json to be sent to the Upstream via the `sender_outgoing` sender.
         let cloned = client.clone();
-        task::spawn(async move {
+        spawn(async move {
             let recv = receiver_share.clone();
             loop {
                 let (nonce, job_id, _version, ntime) = recv.recv().await.unwrap();
@@ -195,7 +201,7 @@ impl Client {
                 let message = format!("{}\n", serde_json::to_string(&message).unwrap());
                 sender_outgoing_clone.send(message).await.unwrap();
             }
-        });
+        }).detach();
         let recv_incoming = client.safe_lock(|c| c.receiver_incoming.clone()).unwrap();
 
         loop {
