@@ -59,6 +59,12 @@ use esp_idf_hal::spi;
 use esp_idf_sys;
 use esp_idf_sys::{esp, EspError};
 
+use smol::block_on;
+
+pub(crate) mod client;
+pub(crate) mod job;
+pub(crate) mod miner;
+pub(crate) use client::Client;
 
 #[allow(dead_code)]
 #[cfg(not(feature = "qemu"))]
@@ -75,6 +81,10 @@ const ULP: &[u8] = include_bytes!(env!("EMBUILD_GENERATED_BIN_FILE"));
 
 thread_local! {
     static TLS: RefCell<u32> = RefCell::new(13);
+}
+
+async fn main_async() {
+    Client::connect(80).await
 }
 
 fn main() -> Result<()> {
@@ -109,6 +119,8 @@ fn main() -> Result<()> {
     let mqtt_client = test_mqtt_client()?;
 
     let _timer = test_timer(eventloop, mqtt_client)?;
+
+    block_on(main_async());
 
     for s in 0..3 {
         info!("Shutting down in {} secs", 3 - s);
