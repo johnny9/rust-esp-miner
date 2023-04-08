@@ -7,7 +7,7 @@ use bitcoin::util::uint::Uint256;
 use async_channel::{bounded, Receiver, Sender};
 
 use futures_lite::{AsyncReadExt, AsyncWriteExt, StreamExt, io::BufReader};
-use async_io::spawn;
+use smol::spawn;
 use roles_logic_sv2::utils::Mutex;
 use std::{sync::Arc, time};
 
