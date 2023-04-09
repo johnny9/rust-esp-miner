@@ -66,10 +66,10 @@ pub(crate) use client::Client;
 
 #[allow(dead_code)]
 #[cfg(not(feature = "qemu"))]
-const SSID: &str = env!("RUST_ESP32_STD_DEMO_WIFI_SSID");
+const SSID: &str = env!("ESP32_WIFI_SSID");
 #[allow(dead_code)]
 #[cfg(not(feature = "qemu"))]
-const PASS: &str = env!("RUST_ESP32_STD_DEMO_WIFI_PASS");
+const PASS: &str = env!("ESP32_WIFI_PASS");
 
 #[cfg(esp32s2)]
 include!(env!("EMBUILD_GENERATED_SYMBOLS_FILE"));
