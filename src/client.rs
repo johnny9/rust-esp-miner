@@ -1,12 +1,13 @@
 use async_io::Async;
-use std::net::TcpStream;
+use std::net::{TcpStream, SocketAddr};
 use std::convert::TryInto;
 
 use bitcoin::util::uint::Uint256;
 
 use async_channel::{bounded, Receiver, Sender};
 
-use futures_lite::{AsyncReadExt, AsyncWriteExt, StreamExt, io::BufReader};
+use futures_lite::{AsyncReadExt, AsyncWriteExt, AsyncBufReadExt, StreamExt, io::BufReader};
+
 use smol::spawn;
 use roles_logic_sv2::utils::Mutex;
 use std::{sync::Arc, time};
@@ -20,7 +21,6 @@ use v1::{
 };
 
 use crate::{job::Job, miner::Miner};
-const ADDR: &str = "127.0.0.1:34255";
 
 /// Represents the Mining Device client which is connected to a Upstream node (either a SV1 Pool
 /// server or a SV1 <-> SV2 Translator Proxy server).
@@ -73,9 +73,8 @@ impl Client {
     ///    formatted as a `v1::client_to_server::Submit` and then serialized into a json message
     ///    that is sent to the Upstream via `sender_outgoing`.
     pub(crate) async fn connect(client_id: u32) {
-        let std_stream = TcpStream::connect(ADDR)?;
-        let async_stream = Async::new(stream).unwrap();
-        let stream = Arc::new(async_stream);
+        let address = "127.0.0.1:34255".parse::<SocketAddr>().unwrap();
+        let stream = Arc::new(Async::<TcpStream>::connect(address).await.unwrap());
         let (reader, writer) = (stream.clone(), stream);
 
         // `sender_incoming` listens on socket for incoming messages from the Upstream and sends
@@ -235,7 +234,7 @@ impl Client {
             println!(
                 "CLIENT {} - Received: {}",
                 self_.safe_lock(|s| s.client_id).unwrap(),
-                line
+                &line
             );
             let message: json_rpc::Message = serde_json::from_str(&line).unwrap();
             // If has a message, it sends it back
